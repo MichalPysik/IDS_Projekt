@@ -3,6 +3,9 @@
 -- Autor: Michal Tran (login: xtrant02)
 
 
+-- Poznamka (bude popsano i v dokumentaci): Povinnou realizaci vztahu generalizace/specializace
+-- neprovadime tim, ze by napriklad autor dedil od uzivatele (bylo by hloupe aby byl autor nucen mit uzivatelsky ucet),
+-- provadime ji tak, ze svazek i magazin dedi napriklad nazev, zanr, atd. od epizody, ktera tyto vlastnosti dedi od mangy (vznika hiearchie)
 
 
 ---- Smazani tabulek vytvorenych pri predeslem spusteni skriptu
@@ -68,7 +71,8 @@ CREATE TABLE uzivatel (
     adresa_psc CHAR(5) NOT NULL,
     CONSTRAINT bydli_na_adrese_cp_psc_fk
         FOREIGN KEY (adresa_cp, adresa_psc) REFERENCES adresa (cislo_popisne, psc)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+    spravce SMALLINT DEFAULT 0 NOT NULL
 );
 
 
@@ -179,7 +183,7 @@ CREATE TABLE polozka (
     CONSTRAINT je_magazin_id_fk
         FOREIGN KEY (magazin_id) REFERENCES magazin (id)
         ON DELETE CASCADE,
-    mnozstvi INT DEFAULT 1,
+    mnozstvi INT DEFAULT 1 NOT NULL,
     CONSTRAINT neni_prazdna_polozka -- Polozka nesmi byt prazdna
         CHECK(svazek_isbn IS NOT NULL OR magazin_id IS NOT NULL),
     CONSTRAINT neni_vicenasobna_polozka -- Polozka vsak musi obsahovat bud pouze magazin, nebo pouze svazek!
