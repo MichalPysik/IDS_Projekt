@@ -33,7 +33,7 @@ CREATE TABLE zanr (
 CREATE TABLE adresa (
     cislo_popisne INTEGER NOT NULL,
     psc CHAR(5) NOT NULL
-        CHECK(NOT REGEXP_LIKE(psc, '%[^0-9]%')), -- PSC ma opet fixni pocet cislic
+        CHECK(REGEXP_LIKE(psc, '[0-9]{5}')), -- PSC ma opet fixni pocet cislic
     PRIMARY KEY(cislo_popisne, psc), --slozeny PK
     ulice VARCHAR(64) NOT NULL,
     cislo_domu INT DEFAULT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE adresa (
 
 CREATE TABLE autor (
     ico CHAR(8) NOT NULL PRIMARY KEY
-        CHECK(NOT REGEXP_LIKE(ico, '%[^0-9]%')), -- ICO osoby je osmimistne cislo bez znamenka (dekadicky, cislic musi byt vzdy 8 - proto CHAR a ne VARCHAR, INT ani NUMBER)
+        CHECK(REGEXP_LIKE(ico, '[0-9]{8}')), -- ICO osoby je osmimistne cislo bez znamenka (dekadicky, cislic musi byt vzdy 8 - proto CHAR a ne VARCHAR, INT ani NUMBER)
     jmeno VARCHAR(64) NOT NULL,
     prijmeni VARCHAR(64) NOT NULL,
     datum_narozeni DATE DEFAULT NULL,
@@ -62,7 +62,8 @@ CREATE TABLE uzivatel (
     prijmeni VARCHAR(64) NOT NULL,
     datum_narozeni DATE NOT NULL, -- musi uvest, napriklad male dite si nesmi nic objednavat
     telefon NUMBER(14) NOT NULL, -- az 9 cislic + pripadny prefix (+420 zapiseme jako 00420) -> 5 + 9 = 14 cislic
-    email VARCHAR(128) NOT NULL,
+    email VARCHAR(128) NOT NULL
+        CHECK(REGEXP_LIKE(email, '^[a-z][a-z0-9_\.-]*@[a-z0-9_\.-]+\.[a-z]{2}$', 'i')),
     adresa_cp INTEGER NOT NULL,
     adresa_psc CHAR(5) NOT NULL,
     CONSTRAINT bydli_na_adrese_cp_psc_fk
@@ -91,7 +92,7 @@ CREATE TABLE magazin (
 
 CREATE TABLE svazek (
     isbn CHAR(10) NOT NULL PRIMARY KEY
-        CHECK(NOT REGEXP_LIKE(isbn, '%[^0-9]%')), -- standard ISBN-10, NE ISBN-13
+        CHECK(REGEXP_LIKE(isbn, '[0-9]{10}')), -- standard ISBN-10, NE ISBN-13
     poradove_cislo NUMBER(8, 2) NOT NULL,
     datum_vydani DATE NOT NULL,
     pocet_stran INT DEFAULT NULL,
@@ -187,7 +188,29 @@ CREATE TABLE polozka (
 
 
 
-
-
 ---- Tvorba instanci (vkladani do tabulek)
+
+INSERT INTO zanr (nazev)
+VALUES ('Shonen');
+INSERT INTO zanr (nazev)
+VALUES ('Seinem');
+INSERT INTO zanr (nazev)
+VALUES ('Kodomomuke');
+
+
+INSERT INTO adresa (cislo_popisne, psc, ulice, cislo_domu, zeme, mesto)
+VALUES (4271, 64300,'Meulerova', 12, 'Česká republika', 'Brno');
+INSERT INTO adresa (cislo_popisne, psc, ulice, zeme, mesto)
+VALUES (1337, 23600, 'Grove Street', 'USA', 'Los Santos');
+INSERT INTO adresa (cislo_popisne, psc, ulice, cislo_domu, zeme, mesto)
+VALUES (998, 42069, 'Bumpy St.', 2, 'UK', 'Brighton');
+
+
+INSERT INTO autor (ico, jmeno, prijmeni, datum_narozeni, bydliste, zanr_id)
+VALUES (00425691, 'Hitsune', 'Yamaka', TO_DATE('1997-05-21', 'yyyy/mm/dd'), 'somewhere in the mountains in Japan', 1);
+INSERT INTO autor (ico, jmeno, prijmeni)
+VALUES (01010101, 'Hasan', 'Paranoidan');
+INSERT INTO autor (ico, jmeno, prijmeni, datum_narozeni, zanr_id)
+VALUES (74630014, 'Yoshi', 'Miu', TO_DATE('1985-09-13', 'yyyy/mm/dd'), 3);
+
 
