@@ -63,7 +63,7 @@ CREATE TABLE uzivatel (
     datum_narozeni DATE NOT NULL, -- musi uvest, napriklad male dite si nesmi nic objednavat
     telefon NUMBER(14) NOT NULL, -- az 9 cislic + pripadny prefix (+420 zapiseme jako 00420) -> 5 + 9 = 14 cislic
     email VARCHAR(128) NOT NULL
-        CHECK(REGEXP_LIKE(email, '^[a-z][a-z0-9_\.-]*@[a-z0-9_\.-]+\.[a-z]{2}$', 'i')),
+        CHECK(REGEXP_LIKE(email, '^[a-z][a-z0-9_\.-]*@[a-z0-9_\.-]+\.[a-z]{2,}$', 'i')),
     adresa_cp INTEGER NOT NULL,
     adresa_psc CHAR(5) NOT NULL,
     CONSTRAINT bydli_na_adrese_cp_psc_fk
@@ -179,6 +179,7 @@ CREATE TABLE polozka (
     CONSTRAINT je_magazin_id_fk
         FOREIGN KEY (magazin_id) REFERENCES magazin (id)
         ON DELETE CASCADE,
+    mnozstvi INT DEFAULT 1,
     CONSTRAINT neni_prazdna_polozka -- Polozka nesmi byt prazdna
         CHECK(svazek_isbn IS NOT NULL OR magazin_id IS NOT NULL),
     CONSTRAINT neni_vicenasobna_polozka -- Polozka vsak musi obsahovat bud pouze magazin, nebo pouze svazek!
@@ -203,14 +204,93 @@ VALUES (4271, 64300,'Meulerova', 12, 'Česká republika', 'Brno');
 INSERT INTO adresa (cislo_popisne, psc, ulice, zeme, mesto)
 VALUES (1337, 23600, 'Grove Street', 'USA', 'Los Santos');
 INSERT INTO adresa (cislo_popisne, psc, ulice, cislo_domu, zeme, mesto)
-VALUES (998, 42069, 'Bumpy St.', 2, 'UK', 'Brighton');
+VALUES (998, 42069, 'Tech Street', 2, 'USA', 'Los Angeles');
 
 
 INSERT INTO autor (ico, jmeno, prijmeni, datum_narozeni, bydliste, zanr_id)
-VALUES (00425691, 'Hitsune', 'Yamaka', TO_DATE('1997-05-21', 'yyyy/mm/dd'), 'somewhere in the mountains in Japan', 1);
+VALUES ('00425691', 'Hitsune', 'Yamaka', TO_DATE('1997-05-21', 'yyyy/mm/dd'), 'somewhere in the mountains in Japan', 1);
 INSERT INTO autor (ico, jmeno, prijmeni)
-VALUES (01010101, 'Hasan', 'Paranoidan');
+VALUES ('01010101', 'Hasan', 'Paranoidan'); -- pokud nejake cislo zacina explicitni nulou, je treba ho zapsat s jednoduchyma uvozovkama ''
 INSERT INTO autor (ico, jmeno, prijmeni, datum_narozeni, zanr_id)
 VALUES (74630014, 'Yoshi', 'Miu', TO_DATE('1985-09-13', 'yyyy/mm/dd'), 3);
+
+
+INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc)
+VALUES ('Carl', 'Johnson', TO_DATE('1962-03-09', 'yyyy/mm/dd'), 34645501111, 'CJ_straight-busta@grove.family.com', 1337, 23600);
+INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc)
+VALUES ('Martin', 'Dobrak', TO_DATE('2001-11-13', 'yyyy/mm/dd'), '00420773516991', 'martus322@seznam.cz', 4271, 64300);
+INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc)
+VALUES ('Linus', 'Sebastian', TO_DATE('1986-03-21', 'yyyy/mm/dd'), 456987123, 'linusTechTips@ltt-store.com', 998, 42069);
+
+
+INSERT INTO vydavatelstvi (nazev)
+VALUES ('Albatros');
+INSERT INTO vydavatelstvi (nazev)
+VALUES ('MangaTron');
+
+
+INSERT INTO magazin (nazev, datum_vydani, cena, vydavatelstvi_id)
+VALUES ('MangaCritics', TO_DATE('2018-08-01', 'yyyy/mm/dd'), 21.99, 2);
+INSERT INTO magazin (nazev, datum_vydani, cena, vydavatelstvi_id)
+VALUES ('Best of Naruto', TO_DATE('2020-02-27', 'yyyy/mm/dd'), 199, 1);
+INSERT INTO magazin (nazev, datum_vydani, cena, vydavatelstvi_id)
+VALUES ('Super Saiyan strikes again', TO_DATE('1998-08-30', 'yyyy/mm/dd'), 1199, 1);
+
+
+INSERT INTO svazek (isbn, poradove_cislo, datum_vydani, pocet_stran, cena)
+VALUES (1234567890, 2.1, TO_DATE('2019-10-10', 'yyyy/mm/dd'), 209, 400);
+INSERT INTO svazek (isbn, poradove_cislo, datum_vydani, cena)
+VALUES ('0012478902', 11, TO_DATE('2001-01-02', 'yyyy/mm/dd'), 299);
+
+
+INSERT INTO manga (nazev, zacatek_vydavani, zanr_id, vydavatelstvi_id, autor_ico, kreslir_ico)
+VALUES ('Naruto', TO_DATE('1999-05-13', 'yyyy/mm/dd'), 1, 2, '00425691', '00425691');
+INSERT INTO manga (nazev, zacatek_vydavani, konec_vydavani, zanr_id, vydavatelstvi_id, autor_ico, kreslir_ico)
+VALUES ('Attack on Titan', TO_DATE('2003-06-14', 'yyyy/mm/dd'), TO_DATE('2021-03-07', 'yyyy/mm/dd'), 1, 1, '00425691', '01010101');
+INSERT INTO manga(nazev, zacatek_vydavani, zanr_id, vydavatelstvi_id, autor_ico, kreslir_ico)
+VALUES ('Super Mario', TO_DATE('1985-08-23', 'yyyy/mm/dd'), 3, 2, 74630014, '01010101');
+INSERT INTO manga (nazev, zacatek_vydavani, zanr_id, vydavatelstvi_id, autor_ico, kreslir_ico)
+VALUES ('Dragon Ball Z', TO_DATE('2003-12-24', 'yyyy/mm/dd'), 2, 1, '00425691', '01010101');
+
+
+INSERT INTO episoda (nazev, poradove_cislo, datum_vydani, pocet_stran, manga_id, magazin_id)
+VALUES ('Narutova prvni dobrodruzstvi', 1.1, TO_DATE('1999-05-13', 'yyyy/mm/dd'), 97, 1, 2);
+INSERT INTO episoda (nazev, poradove_cislo, datum_vydani, pocet_stran, manga_id, magazin_id)
+VALUES ('Narutova druha dobrodruzstvi', 1.2, TO_DATE('2000-03-17', 'yyyy/mm/dd'), 131, 1, 2);
+INSERT INTO episoda (nazev, poradove_cislo, datum_vydani, pocet_stran, manga_id, svazek_isbn)
+VALUES ('Titans are having dinner', 32, TO_DATE('2010-10-19', 'yyyy/mm/dd'), 179, 2, '0012478902');
+INSERT INTO episoda (nazev, poradove_cislo, datum_vydani, manga_id, svazek_isbn)
+VALUES ('Mario meets Browser', 2.3, TO_DATE('2012-12-21', 'yyyy/mm/dd'), 2, 1234567890);
+INSERT INTO episoda (nazev, poradove_cislo, datum_vydani, pocet_stran, manga_id, magazin_id)
+VALUES ('Still under 9000', 37, TO_DATE('1997-12-13', 'yyyy/mm/dd'), 22, 4, 3);
+
+
+INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
+VALUES (TO_DATE('2020-01-01', 'yyyy/mm/dd'), 487, 'prijata', 1, 1337, 23600);
+INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
+VALUES (TO_DATE('2020-06-11', 'yyyy/mm/dd'), 200, 'odeslana', 2, 1337, 23600); --objednal jako darek na jinou nez svou adresu
+INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
+VALUES (TO_DATE('2021-02-19', 'yyyy/mm/dd'), 2587.32, 'zaplacena', 3, 998, 42069);
+
+
+INSERT INTO polozka (objednavka_id, magazin_id)
+VALUES (1, 3);
+INSERT INTO polozka (objednavka_id, magazin_id)
+VALUES (1, 2);
+INSERT INTO polozka (objednavka_id, svazek_isbn)
+VALUES (2, '0012478902');
+INSERT INTO polozka (objednavka_id, svazek_isbn, mnozstvi)
+VALUES (3, 1234567890, 16);
+INSERT INTO polozka (objednavka_id, magazin_id)
+VALUES (3, 1);
+
+
+
+
+
+
+
+
+
 
 
