@@ -1,11 +1,8 @@
--- IDS Projekt část 2 - SQL skript pro vytvoření základních objektů databáze
+-- IDS Projekt část 3 - SQL skript s dotazy SELECT
 -- Autor: Michal Pyšík (login: xpysik00)
 -- Autor: Michal Tran (login: xtrant02)
 
 
--- Poznamka (bude popsano i v dokumentaci): Povinnou realizaci vztahu generalizace/specializace
--- neprovadime tim, ze by napriklad autor dedil od uzivatele (bylo by hloupe aby byl autor nucen mit uzivatelsky ucet),
--- provadime ji tak, ze svazek i magazin dedi napriklad nazev, zanr, atd. od epizody, ktera tyto vlastnosti dedi od mangy (vznika hiearchie)
 
 
 ---- Smazani tabulek vytvorenych pri predeslem spusteni skriptu
@@ -275,6 +272,10 @@ INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
 VALUES (TO_DATE('2020-06-11', 'yyyy/mm/dd'), 200, 'odeslana', 2, 1337, 23600); --objednal jako darek na jinou nez svou adresu
 INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
 VALUES (TO_DATE('2021-02-19', 'yyyy/mm/dd'), 2587.32, 'zaplacena', 3, 998, 42069);
+INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
+VALUES (TO_DATE('2020-06-14', 'yyyy/mm/dd'), 220, 'stornovana', 2, 4271, 64300);
+INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
+VALUES (TO_DATE('2020-06-15', 'yyyy/mm/dd'), 200, 'zaplacena', 2, 4271, 64300);
 
 
 INSERT INTO polozka (objednavka_id, magazin_id)
@@ -287,6 +288,130 @@ INSERT INTO polozka (objednavka_id, svazek_isbn, mnozstvi)
 VALUES (3, 1234567890, 16);
 INSERT INTO polozka (objednavka_id, magazin_id)
 VALUES (3, 1);
+INSERT INTO polozka (objednavka_id, magazin_id)
+VALUES (4, 2);
+INSERT INTO polozka (objednavka_id, magazin_id)
+VALUES (5, 3);
+
+
+
+
+---- Dotazy SELECT
+
+-- Které mangy se začaly vydávat před začátkem 21. století a kdo je napsal?
+SELECT 
+    mng.zacatek_vydavani AS "Datum",
+    mng.nazev AS "Manga",
+    aut.jmeno AS "Jmeno autora",
+    aut.prijmeni AS "Prijmeni autora"
+FROM manga mng
+JOIN autor aut ON mng.autor_ico = aut.ico
+WHERE mng.zacatek_vydavani < TO_DATE('2000-1-1', 'yyyy/mm/dd')
+ORDER BY "Datum";
+
+
+-- Které magazíny obsahují nějakou epizodu mangy Naruto?
+SELECT DISTINCT
+    mgz.nazev AS "Magazin",
+    mgz.datum_vydani AS "Datum vydani",
+    mgz.cena AS "Cena"
+FROM magazin mgz
+JOIN episoda eps ON eps.magazin_id = mgz.id
+JOIN manga mng ON mng.id = eps.manga_id
+WHERE mng.nazev = 'Naruto'
+ORDER BY "Magazin";
+
+
+-- Která manga (případně mangy) aktuálně obsahuje nejvíce episod a kolik?
+SELECT
+    mng.nazev AS "Manga",
+    COUNT(eps.manga_id) AS "Episody"
+FROM manga mng
+JOIN episoda eps ON eps.manga_id = mng.id
+GROUP BY mng.id, mng.nazev
+HAVING COUNT(eps.manga_id) >= ALL(
+    SELECT COUNT(eps.manga_id)
+    FROM episoda eps
+    GROUP BY eps.manga_id
+)
+ORDER BY "Manga";
+
+
+-- Kteří autoři se věnují pouze kreslení? (libovolnou mangu nakreslil ale žádnou nenapsal)
+SELECT
+    aut.jmeno AS "Jmeno",
+    aut.prijmeni AS "Prijmeni"
+FROM autor aut
+WHERE NOT EXISTS(
+    SELECT *
+    FROM manga mng_psal
+    WHERE mng_psal.autor_ico = aut.ico
+) AND EXISTS(
+    SELECT *
+    FROM manga mng_kreslil
+    WHERE mng_kreslil.kreslir_ico = aut.ico
+)
+ORDER BY "Prijmeni";
+
+
+-- Které mangy jsou psány i kresleny tím stejným autorem, a kým?
+SELECT
+    mng.nazev AS "Manga",
+    aut_psal.jmeno AS "Jmeno autora",
+    aut_psal.prijmeni AS "Prijmeni autora"
+FROM manga mng
+JOIN autor aut_psal ON aut_psal.ico = mng.autor_ico
+JOIN autor aut_kreslil ON aut_kreslil.ico = mng.kreslir_ico AND aut_kreslil.ico = aut_psal.ico
+ORDER BY "Manga";
+
+
+-- Která vydavatelství vydávají nějaký magazín levnější než 200 jednotek měny?
+SELECT
+    vyd.nazev AS "Vydavatelstvi",
+    vyd.id AS "ID Vydavatelstvi"
+FROM vydavatelstvi vyd
+WHERE EXISTS(
+    SELECT *
+    FROM magazin mgz
+    WHERE mgz.vydavatelstvi_id = vyd.id AND mgz.cena < 200
+)
+ORDER BY "Vydavatelstvi";
+
+
+-- Čas rozdávat bonusy věrným zákazníkům - seřaďme uživatele podle počtu (nestornovaných) objednávek, ten také zobrazíme
+SELECT
+    COUNT(obj.uzivatel_id) AS "Objednavky",
+    uzv.id AS "ID uzivatele",
+    uzv.email AS "Email",
+    uzv.jmeno AS "Jmeno",
+    uzv.prijmeni AS "Prijmeni"
+FROM uzivatel uzv
+JOIN objednavka obj ON obj.uzivatel_id = uzv.id
+WHERE obj.stav != 'stornovana'
+GROUP BY uzv.id, uzv.jmeno, uzv.prijmeni, uzv.email
+ORDER BY "Objednavky" DESC, "ID uzivatele";
+
+
+-- Které svazky se nacházejí alespoň v jedné objednávce, která ještě nebyl odeslána ani stornována?
+SELECT DISTINCT
+    svk.isbn AS "ISBN",
+    svk.poradove_cislo AS "Poradove cislo",
+    mng.nazev AS "Soucasti mangy"
+FROM svazek svk
+JOIN episoda eps ON eps.svazek_isbn = svk.isbn
+JOIN manga mng ON mng.id = eps.manga_id
+WHERE svk.isbn IN(
+    SELECT plk.svazek_isbn
+    FROM polozka plk
+    JOIN objednavka obj
+    ON obj.id = plk.objednavka_id
+    WHERE obj.stav NOT IN('odeslana', 'stornovana')
+)
+ORDER BY "ISBN";
+
+
+
+
 
 
 
