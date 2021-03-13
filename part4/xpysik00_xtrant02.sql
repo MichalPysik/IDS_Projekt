@@ -1,11 +1,11 @@
--- IDS Projekt část 3 - SQL skript s dotazy SELECT
+-- IDS Projekt část 4 - SQL skript pro vytvoření pokročilých objektů databáze
 -- Autor: Michal Pyšík (login: xpysik00)
 -- Autor: Michal Tran (login: xtrant02)
 
 
 
 
----- Smazani tabulek vytvorenych pri predeslem spusteni skriptu
+---- Smazání tabulek, sekvencí, atd. vytvořených při ředešlém spuštění skriptu - DROP
 
 DROP TABLE autor CASCADE CONSTRAINTS;
 DROP TABLE uzivatel CASCADE CONSTRAINTS;
@@ -19,10 +19,13 @@ DROP TABLE objednavka CASCADE CONSTRAINTS;
 DROP TABLE adresa CASCADE CONSTRAINTS;
 DROP TABLE polozka CASCADE CONSTRAINTS;
 
+DROP SEQUENCE polozka_id_liche;
+DROP SEQUENCE polozka_id_sude;
 
 
 
----- Tvorba novych tabulek
+
+---- Tvorba nových tabulek - CREATE TABLE
 
 CREATE TABLE zanr (
     id INT GENERATED AS IDENTITY NOT NULL PRIMARY KEY,
@@ -60,6 +63,7 @@ CREATE TABLE uzivatel (
     id INT GENERATED AS IDENTITY NOT NULL PRIMARY KEY,
     jmeno VARCHAR(64) NOT NULL,
     prijmeni VARCHAR(64) NOT NULL,
+    heslo VARCHAR(128) NOT NULL, -- Pozor! Nový atribut oproti předchozím skriptům
     datum_narozeni DATE NOT NULL, -- musi uvest, napriklad male dite si nesmi nic objednavat
     telefon NUMBER(14) NOT NULL, -- az 9 cislic + pripadny prefix (+420 zapiseme jako 00420) -> 5 + 9 = 14 cislic
     email VARCHAR(128) NOT NULL
@@ -167,7 +171,7 @@ CREATE TABLE objednavka (
 
 
 CREATE TABLE polozka (
-    id INT GENERATED AS IDENTITY NOT NULL PRIMARY KEY,
+    id INT DEFAULT NULL PRIMARY KEY, -- POZOR! zmena oproti predchozim skriptum!
     objednavka_id INT NOT NULL,
     CONSTRAINT soucasti_objednavky_id_fk
         FOREIGN KEY (objednavka_id) REFERENCES objednavka (id)
@@ -181,7 +185,7 @@ CREATE TABLE polozka (
         FOREIGN KEY (magazin_id) REFERENCES magazin (id)
         ON DELETE CASCADE,
     mnozstvi INT DEFAULT 1 NOT NULL
-	CHECK(mnozstvi > 0),
+        CHECK(mnozstvi > 0),
     CONSTRAINT neni_prazdna_polozka -- Polozka nesmi byt prazdna
         CHECK(svazek_isbn IS NOT NULL OR magazin_id IS NOT NULL),
     CONSTRAINT neni_vicenasobna_polozka -- Polozka vsak musi obsahovat bud pouze magazin, nebo pouze svazek!
@@ -191,7 +195,43 @@ CREATE TABLE polozka (
 
 
 
----- Tvorba instanci (vkladani do tabulek)
+---- Nastavení triggerů - TRIGGER (part 1/2)
+
+-- První trigger generuje hodnotu ID nové položky v objednávce
+-- pokud je množství dané položky 1, generuje následující liché číslo v sekvenci lichých čísel
+-- pokud je množství dané položky > 1, generuje následující sudé číslo v sekv. sud. čísel (třeba pro rychlé odlišení množství už pomocí ID)
+CREATE SEQUENCE polozka_id_liche
+    START WITH 1
+    INCREMENT BY 2;
+CREATE SEQUENCE polozka_id_sude
+    START WITH 2
+    INCREMENT BY 2;
+CREATE OR REPLACE TRIGGER id_polozky_parita
+    BEFORE INSERT ON polozka
+    FOR EACH ROW
+    WHEN (NEW.id IS NULL)
+    BEGIN
+        IF (:NEW.mnozstvi > 1) THEN
+            :NEW.id := polozka_id_sude.NEXTVAL;
+        ELSE
+            :NEW.id := polozka_id_liche.NEXTVAL;
+        END IF;
+    END;
+/
+
+-- Druhý trigger generuje hash uživatelova hesla, aby nebylo uloženo jako raw text
+CREATE OR REPLACE TRIGGER hash_hesla
+    BEFORE INSERT ON uzivatel
+    FOR EACH ROW
+    BEGIN
+        :NEW.heslo := DBMS_OBFUSCATION_TOOLKIT.MD5(input => UTL_I18N.STRING_TO_RAW(:NEW.heslo));
+    END;
+/
+      
+   
+
+
+---- Tvorba instancí (vkládání do tabulek) - INSERT INTO
 
 INSERT INTO zanr (nazev)
 VALUES ('Shonen');
@@ -217,12 +257,13 @@ INSERT INTO autor (ico, jmeno, prijmeni, datum_narozeni, zanr_id)
 VALUES (74630014, 'Yoshi', 'Miu', TO_DATE('1985-09-13', 'yyyy/mm/dd'), 3);
 
 
-INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc)
-VALUES ('Carl', 'Johnson', TO_DATE('1962-03-09', 'yyyy/mm/dd'), 34645501111, 'CJ_straight-busta@grove.family.com', 1337, 23600);
-INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc)
-VALUES ('Martin', 'Dobrak', TO_DATE('2001-11-13', 'yyyy/mm/dd'), '00420773516991', 'martus322@seznam.cz', 4271, 64300);
-INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc)
-VALUES ('Linus', 'Sebastian', TO_DATE('1986-03-21', 'yyyy/mm/dd'), 456987123, 'linusTechTips@ltt-store.com', 998, 42069);
+-- zde tentokrat vkladame take heslo, ktere spusti trigger na generaci hashe
+INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc, heslo)
+VALUES ('Carl', 'Johnson', TO_DATE('1962-03-09', 'yyyy/mm/dd'), 34645501111, 'CJ_straight-busta@grove.family.com', 1337, 23600, 'BigSmokeIsFatass');
+INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc, heslo)
+VALUES ('Martin', 'Dobrak', TO_DATE('2001-11-13', 'yyyy/mm/dd'), '00420773516991', 'martus322@seznam.cz', 4271, 64300, 'mOJeHeSLo147');
+INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc, heslo)
+VALUES ('Linus', 'Sebastian', TO_DATE('1986-03-21', 'yyyy/mm/dd'), 456987123, 'linusTechTips@ltt-store.com', 998, 42069, 't3chT1pZz');
 
 
 INSERT INTO vydavatelstvi (nazev)
@@ -279,10 +320,11 @@ INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
 VALUES (TO_DATE('2020-06-15', 'yyyy/mm/dd'), 200, 'zaplacena', 2, 4271, 64300);
 
 
+-- zde by se měl spustit trigger pro paritu generovaných id položek
 INSERT INTO polozka (objednavka_id, magazin_id)
 VALUES (1, 3);
-INSERT INTO polozka (objednavka_id, magazin_id)
-VALUES (1, 2);
+INSERT INTO polozka (objednavka_id, magazin_id, mnozstvi)
+VALUES (1, 2, 2);
 INSERT INTO polozka (objednavka_id, svazek_isbn)
 VALUES (2, '0012478902');
 INSERT INTO polozka (objednavka_id, svazek_isbn, mnozstvi)
@@ -297,121 +339,20 @@ VALUES (5, 3);
 
 
 
----- Dotazy SELECT
+-- Otestování správného fungování triggerů - TRIGGER (part 2/2)
 
--- Které mangy se začaly vydávat před začátkem 21. století a kdo je napsal?
-SELECT 
-    mng.zacatek_vydavani AS "Datum",
-    mng.nazev AS "Manga",
-    aut.jmeno AS "Jmeno autora",
-    aut.prijmeni AS "Prijmeni autora"
-FROM manga mng
-JOIN autor aut ON mng.autor_ico = aut.ico
-WHERE mng.zacatek_vydavani < TO_DATE('2000-1-1', 'yyyy/mm/dd')
-ORDER BY "Datum";
+-- první trigger - očekáváme id položek: 1,3,5,7,9,2,4 (jen dvě mají větší množství - mají sudé id)
+SELECT id, mnozstvi
+FROM polozka
+ORDER BY mnozstvi;
 
-
--- Které magazíny obsahují nějakou epizodu mangy Naruto?
-SELECT DISTINCT
-    mgz.nazev AS "Magazin",
-    mgz.datum_vydani AS "Datum vydani",
-    mgz.cena AS "Cena"
-FROM magazin mgz
-JOIN episoda eps ON eps.magazin_id = mgz.id
-JOIN manga mng ON mng.id = eps.manga_id
-WHERE mng.nazev = 'Naruto'
-ORDER BY "Magazin";
-
-
--- Která manga (případně mangy) aktuálně obsahuje nejvíce episod a kolik?
+-- druhý trigger - hesla uživatelů by něměla být viditelná jako čitelný text, jen jako vygenerovaný hash
 SELECT
-    mng.nazev AS "Manga",
-    COUNT(eps.manga_id) AS "Episody"
-FROM manga mng
-JOIN episoda eps ON eps.manga_id = mng.id
-GROUP BY mng.id, mng.nazev
-HAVING COUNT(eps.manga_id) >= ALL(
-    SELECT COUNT(eps.manga_id)
-    FROM episoda eps
-    GROUP BY eps.manga_id
-)
-ORDER BY "Manga";
-
-
--- Kteří autoři se věnují pouze kreslení? (libovolnou mangu nakreslil ale žádnou nenapsal)
-SELECT
-    aut.jmeno AS "Jmeno",
-    aut.prijmeni AS "Prijmeni"
-FROM autor aut
-WHERE NOT EXISTS(
-    SELECT *
-    FROM manga mng_psal
-    WHERE mng_psal.autor_ico = aut.ico
-) AND EXISTS(
-    SELECT *
-    FROM manga mng_kreslil
-    WHERE mng_kreslil.kreslir_ico = aut.ico
-)
-ORDER BY "Prijmeni";
-
-
--- Které mangy jsou psány i kresleny tím stejným autorem, a kým?
-SELECT
-    mng.nazev AS "Manga",
-    aut_psal.jmeno AS "Jmeno autora",
-    aut_psal.prijmeni AS "Prijmeni autora"
-FROM manga mng
-JOIN autor aut_psal ON aut_psal.ico = mng.autor_ico
-JOIN autor aut_kreslil ON aut_kreslil.ico = mng.kreslir_ico AND aut_kreslil.ico = aut_psal.ico
-ORDER BY "Manga";
-
-
--- Která vydavatelství vydávají nějaký magazín levnější než 200 jednotek měny?
-SELECT
-    vyd.nazev AS "Vydavatelstvi",
-    vyd.id AS "ID Vydavatelstvi"
-FROM vydavatelstvi vyd
-WHERE EXISTS(
-    SELECT *
-    FROM magazin mgz
-    WHERE mgz.vydavatelstvi_id = vyd.id AND mgz.cena < 200
-)
-ORDER BY "Vydavatelstvi";
-
-
--- Čas rozdávat bonusy věrným zákazníkům - seřaďme uživatele podle počtu (nestornovaných) objednávek, ten také zobrazíme
-SELECT
-    COUNT(obj.uzivatel_id) AS "Objednavky",
-    uzv.id AS "ID uzivatele",
-    uzv.email AS "Email",
-    uzv.jmeno AS "Jmeno",
-    uzv.prijmeni AS "Prijmeni"
-FROM uzivatel uzv
-JOIN objednavka obj ON obj.uzivatel_id = uzv.id
-WHERE obj.stav != 'stornovana'
-GROUP BY uzv.id, uzv.jmeno, uzv.prijmeni, uzv.email
-ORDER BY "Objednavky" DESC, "ID uzivatele";
-
-
--- Které svazky se nacházejí alespoň v jedné objednávce, která ještě nebyl odeslána ani stornována?
-SELECT DISTINCT
-    svk.isbn AS "ISBN",
-    svk.poradove_cislo AS "Poradove cislo",
-    mng.nazev AS "Soucasti mangy"
-FROM svazek svk
-JOIN episoda eps ON eps.svazek_isbn = svk.isbn
-JOIN manga mng ON mng.id = eps.manga_id
-WHERE svk.isbn IN(
-    SELECT plk.svazek_isbn
-    FROM polozka plk
-    JOIN objednavka obj
-    ON obj.id = plk.objednavka_id
-    WHERE obj.stav NOT IN('odeslana', 'stornovana')
-)
-ORDER BY "ISBN";
-
-
-
+    jmeno,
+    prijmeni,
+    heslo AS "hash_hesla"
+FROM uzivatel
+ORDER BY jmeno;
 
 
 

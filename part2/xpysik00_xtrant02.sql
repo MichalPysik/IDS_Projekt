@@ -183,7 +183,8 @@ CREATE TABLE polozka (
     CONSTRAINT je_magazin_id_fk
         FOREIGN KEY (magazin_id) REFERENCES magazin (id)
         ON DELETE CASCADE,
-    mnozstvi INT DEFAULT 1 NOT NULL,
+    mnozstvi INT DEFAULT 1 NOT NULL
+	CHECK(mnozstvi > 0),
     CONSTRAINT neni_prazdna_polozka -- Polozka nesmi byt prazdna
         CHECK(svazek_isbn IS NOT NULL OR magazin_id IS NOT NULL),
     CONSTRAINT neni_vicenasobna_polozka -- Polozka vsak musi obsahovat bud pouze magazin, nebo pouze svazek!
