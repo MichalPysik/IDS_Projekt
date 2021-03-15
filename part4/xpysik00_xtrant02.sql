@@ -264,6 +264,8 @@ INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp
 VALUES ('Martin', 'Dobrak', TO_DATE('2001-11-13', 'yyyy/mm/dd'), '00420773516991', 'martus322@seznam.cz', 4271, 64300, 'mOJeHeSLo147');
 INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc, heslo)
 VALUES ('Linus', 'Sebastian', TO_DATE('1986-03-21', 'yyyy/mm/dd'), 456987123, 'linusTechTips@ltt-store.com', 998, 42069, 't3chT1pZz');
+INSERT INTO uzivatel (jmeno, prijmeni, datum_narozeni, telefon, email, adresa_cp, adresa_psc, heslo)
+VALUES ('Klementina', 'Dobrakova', TO_DATE('1973-04-29', 'yyyy/mm/dd'), '00420368741298', 'martinova.mama@seznam.cz', 4271, 64300, 'heslo123');
 
 
 INSERT INTO vydavatelstvi (nazev)
@@ -428,3 +430,42 @@ END;
 EXEC podil_levnejsich_objednavek(300);
 EXEC podil_levnejsich_objednavek(1);
 EXEC podil_levnejsich_objednavek(100000);
+
+
+
+
+---- EXPLAIN PLAN
+
+-- Ale ne, zavřely se české hranice! Potřebujeme o tom kontaktovat všechny zahraniční uživatele!
+-- Zobrazí email, počet objednávek a stát všech uživatelů žijící mimo Českou republiku, kteří mají alespoň 1 objednávku
+EXPLAIN PLAN FOR
+SELECT
+    uzv.email AS "Email",
+    COUNT(obj.uzivatel_id) AS "Objednavky"
+FROM uzivatel uzv
+JOIN objednavka obj ON obj.uzivatel_id = uzv.id
+JOIN adresa adr ON adr.cislo_popisne = uzv.adresa_cp AND adr.psc = uzv.adresa_psc
+WHERE adr.zeme != 'Česká republika'
+GROUP BY uzv.id, uzv.email
+HAVING COUNT(obj.uzivatel_id) > 0
+ORDER BY "Email";
+-- otestovani
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+-- index rychle seřadí uživatele podle státu, tím se lidé z ČR seskupí a přeskočí
+CREATE INDEX adresa_zeme ON adresa (zeme);
+
+-- Test explain plan po vytvoření indexu
+EXPLAIN PLAN FOR
+SELECT
+    uzv.email AS "Email",
+    COUNT(obj.uzivatel_id) AS "Objednavky"
+FROM uzivatel uzv
+JOIN objednavka obj ON obj.uzivatel_id = uzv.id
+JOIN adresa adr ON adr.cislo_popisne = uzv.adresa_cp AND adr.psc = uzv.adresa_psc
+WHERE adr.zeme != 'Česká republika'
+GROUP BY uzv.id, uzv.email
+HAVING COUNT(obj.uzivatel_id) > 0
+ORDER BY "Email";
+-- otestovani
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
