@@ -317,7 +317,7 @@ VALUES (TO_DATE('2021-02-19', 'yyyy/mm/dd'), 2587.32, 'zaplacena', 3, 998, 42069
 INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
 VALUES (TO_DATE('2020-06-14', 'yyyy/mm/dd'), 220, 'stornovana', 2, 4271, 64300);
 INSERT INTO objednavka (datum, cena, stav, uzivatel_id, adresa_cp, adresa_psc)
-VALUES (TO_DATE('2020-06-15', 'yyyy/mm/dd'), 200, 'zaplacena', 2, 4271, 64300);
+VALUES (TO_DATE('2020-06-15', 'yyyy/mm/dd'), 628.6, 'zaplacena', 2, 4271, 64300);
 
 
 -- zde by se měl spustit trigger pro paritu generovaných id položek
@@ -339,10 +339,12 @@ VALUES (5, 3);
 
 
 
--- Otestování správného fungování triggerů - TRIGGER (part 2/2)
+---- Otestování správného fungování triggerů - TRIGGER (part 2/2)
 
 -- první trigger - očekáváme id položek: 1,3,5,7,9,2,4 (jen dvě mají větší množství - mají sudé id)
-SELECT id, mnozstvi
+SELECT
+    id AS "ID polozky",
+    mnozstvi
 FROM polozka
 ORDER BY mnozstvi;
 
@@ -357,3 +359,72 @@ ORDER BY jmeno;
 
 
 
+---- Tvorba a test procedur - PROCEDURE
+
+SET serveroutput ON;
+
+-- První procedura vypíše kolik objednávek daný uživatel už provedl a zaplatil, kolik za všechny dohromady utratil, a průměrnou cenu jeho objednávky
+-- počítají se pouze objednávky, které už byly zaplaceny a nebyly stornovány
+CREATE OR REPLACE PROCEDURE uzivatel_objednavky_utrata (arg_id_uzivatele INT) AS
+BEGIN
+    DECLARE CURSOR kursor is
+    SELECT uzv.id, uzv.jmeno, uzv.prijmeni, obj.cena
+    FROM uzivatel uzv, objednavka obj
+    WHERE arg_id_uzivatele = uzv.id AND uzv.id = obj.uzivatel_id AND obj.stav IN('zaplacena', 'odeslana');    
+        id_uzivatele uzivatel.id%TYPE;
+        jmeno_uzivatele uzivatel.jmeno%TYPE;
+        prijmeni_uzivatele uzivatel.prijmeni%TYPE;
+        cena_objednavky objednavka.cena%TYPE;
+        suma NUMBER;
+        prumer NUMBER;
+        counter NUMBER;
+        BEGIN
+            suma := 0;
+            prumer := 0;
+            counter := 0;
+            OPEN kursor;
+            LOOP
+                FETCH kursor INTO id_uzivatele, jmeno_uzivatele, prijmeni_uzivatele, cena_objednavky;
+                EXIT WHEN kursor%NOTFOUND;
+                suma := suma + cena_objednavky;
+                counter := counter + 1;
+            END LOOP;
+            CLOSE kursor;
+            prumer := suma / counter;
+            DBMS_OUTPUT.put_line('Uzivatel ID=' || id_uzivatele || ' ' || jmeno_uzivatele || ' ' || prijmeni_uzivatele 
+            || ' dokoncil celkem: ' || counter || ' objednavek, za ktere celkem zaplatil: ' || suma || ' a prumerna cena objednavky byla: ' || prumer);
+            EXCEPTION WHEN ZERO_DIVIDE THEN
+            BEGIN
+                DBMS_OUTPUT.put_line('Vybrany uzivatel zatim nezaplatil zadnou objednavku (nepocitaje stornovane objednavky)');
+            END;
+         END;
+END;
+/
+-- Test první procedury
+-- První uživatel zatím svou objednávku nezaplatil, druhý již zaplatil 2 objednávky
+EXEC uzivatel_objednavky_utrata(1);
+EXEC uzivatel_objednavky_utrata(2);
+
+
+-- Druhá procedura vypíše počet a kolik % všech zaplacených (nestornovaných) objednávek má cenu nižší nebo stejnou jako číselná hodnota předaná argumentem
+CREATE OR REPLACE PROCEDURE podil_levnejsich_objednavek (arg_cena NUMBER) AS
+    celkem NUMBER;
+    pod_hranici NUMBER;
+    podil NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO celkem FROM objednavka obj WHERE obj.stav IN('zaplacena','stornovana');
+    SELECT COUNT(*) INTO pod_hranici FROM objednavka obj WHERE obj.stav IN('zaplacena','odeslana') AND obj.cena <= arg_cena;
+    podil := ROUND(100 * pod_hranici / celkem, 2);
+    DBMS_OUTPUT.put_line('Ze vsech ' || celkem || ' zaplacenych objednavek je jich ' || pod_hranici || ' pod hranici '
+    || arg_cena || ', coz tvori ' || podil || '% vsech zaplacenych objednavek');
+    EXCEPTION WHEN ZERO_DIVIDE THEN
+    BEGIN
+        DBMS_OUTPUT.put_line('Zadna objednavka ulozena v systemu zatim nebyla zaplacena');
+    END;
+END;
+/
+-- Test druhé procedury
+-- 1 levnejsi nez 300, 0 levnejsi nez 1, vsechny levnejsi nez 100 000
+EXEC podil_levnejsich_objednavek(300);
+EXEC podil_levnejsich_objednavek(1);
+EXEC podil_levnejsich_objednavek(100000);
