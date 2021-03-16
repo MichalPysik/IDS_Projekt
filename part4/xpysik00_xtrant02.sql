@@ -21,6 +21,7 @@ DROP TABLE polozka CASCADE CONSTRAINTS;
 
 DROP SEQUENCE polozka_id_liche;
 DROP SEQUENCE polozka_id_sude;
+DROP MATERIALIZED VIEW cekajici_objednavky;
 
 
 
@@ -436,36 +437,108 @@ EXEC podil_levnejsich_objednavek(100000);
 
 ---- EXPLAIN PLAN
 
--- Ale ne, zavřely se české hranice! Potřebujeme o tom kontaktovat všechny zahraniční uživatele!
--- Zobrazí email, počet objednávek a stát všech uživatelů žijící mimo Českou republiku, kteří mají alespoň 1 objednávku
+-- Má vypsat všechny uživatele (s alespoň 1 objednávkou), počet jejich objednávek a celkovou útratu, pak seřadit podle útraty
 EXPLAIN PLAN FOR
 SELECT
-    uzv.email AS "Email",
-    COUNT(obj.uzivatel_id) AS "Objednavky"
+    uzv.id AS "ID",
+    uzv.jmeno AS "Jmeno",
+    uzv.prijmeni AS "Prijmeni",
+    COUNT(obj.uzivatel_id) AS "Objednavky",
+    SUM(obj.cena) AS "Utrata"
 FROM uzivatel uzv
 JOIN objednavka obj ON obj.uzivatel_id = uzv.id
-JOIN adresa adr ON adr.cislo_popisne = uzv.adresa_cp AND adr.psc = uzv.adresa_psc
-WHERE adr.zeme != 'Česká republika'
-GROUP BY uzv.id, uzv.email
-HAVING COUNT(obj.uzivatel_id) > 0
-ORDER BY "Email";
+GROUP BY uzv.id, uzv.jmeno, uzv.prijmeni
+ORDER BY "Utrata" DESC;
 -- otestovani
 SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
 
--- index rychle seřadí uživatele podle státu, tím se lidé z ČR seskupí a přeskočí
-CREATE INDEX adresa_zeme ON adresa (zeme);
+-- Tvorba indexů pro optimalizaci rychlosti (ale obsazení extra paměti) 
+CREATE INDEX uzivatel_id_jmeno_prijmeni ON uzivatel (id, jmeno, prijmeni);
+CREATE INDEX objednavka_iduzv_cena ON objednavka (uzivatel_id, cena);
 
--- Test explain plan po vytvoření indexu
+-- Test explain plan po vytvoření indexů - bude dělat full scan indexů, ne celých tabulek
 EXPLAIN PLAN FOR
 SELECT
-    uzv.email AS "Email",
-    COUNT(obj.uzivatel_id) AS "Objednavky"
+    uzv.id AS "ID",
+    uzv.jmeno AS "Jmeno",
+    uzv.prijmeni AS "Prijmeni",
+    COUNT(obj.uzivatel_id) AS "Objednavky",
+    SUM(obj.cena) AS "Utrata"
 FROM uzivatel uzv
 JOIN objednavka obj ON obj.uzivatel_id = uzv.id
-JOIN adresa adr ON adr.cislo_popisne = uzv.adresa_cp AND adr.psc = uzv.adresa_psc
-WHERE adr.zeme != 'Česká republika'
-GROUP BY uzv.id, uzv.email
-HAVING COUNT(obj.uzivatel_id) > 0
-ORDER BY "Email";
+GROUP BY uzv.id, uzv.jmeno, uzv.prijmeni
+ORDER BY "Utrata" DESC;
 -- otestovani
 SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY);
+
+
+
+
+---- Materializovaný pohled pro druhého uživatele - MATERIALIZED VIEW
+
+-- Zaměstnanec pracuje ve skladu a nakládá odesílané zboží, ukážeme mu všechny objednávky co čekají na odeslání, patřičné doručovací adresy a jména uživatelů která napíše na krabici
+CREATE MATERIALIZED VIEW cekajici_objednavky
+    BUILD IMMEDIATE
+    REFRESH FORCE
+    ON DEMAND
+AS
+SELECT
+    obj.datum AS "Datum vytvoreni",
+    obj.id AS "ID objednavky",
+    adr.zeme AS "Zeme",
+    adr.mesto AS "Mesto",
+    adr.ulice AS "Ulice",
+    adr.cislo_domu AS "Cislo domu",
+    adr.cislo_popisne AS "Cislo popisne",
+    adr.psc AS "PSC",
+    uzv.jmeno AS "Jmeno",
+    uzv.prijmeni AS "Prijmeni"
+FROM objednavka obj
+JOIN adresa adr ON adr.cislo_popisne = obj.adresa_cp AND adr.psc = obj.adresa_psc
+JOIN uzivatel uzv ON uzv.id = obj.uzivatel_id
+WHERE obj.stav NOT IN('odeslana', 'stornovana')
+ORDER BY "Zeme", "Datum vytvoreni"; -- Zeme abychom rychle odlisili zahranicni objednavky, ktere odesila jinou sluzbou nez Ceske
+
+-- První zobrazení pohledu
+SELECT * FROM cekajici_objednavky;
+
+-- úprava zobrazovaných dat
+UPDATE objednavka SET stav = 'odeslana' WHERE id = 1;
+
+-- Druhé zobrazení pohledu, ale není aktualizovaný
+SELECT * FROM cekajici_objednavky;
+
+-- Procedura na aktualizaci pohledu a její spuštění
+CREATE OR REPLACE PROCEDURE refresh_cekajicich_objednavek AS
+BEGIN
+    DBMS_MVIEW.REFRESH('cekajici_objednavky');
+END;
+/
+EXEC refresh_cekajicich_objednavek;
+
+-- Třetí zobrazení pohledu, nyní již zobrazuje aktuální data
+SELECT * FROM cekajici_objednavky;
+
+
+
+
+---- Přístupová práva pro druhého uživatele - PRIVILEGES
+
+-- Práva na spouštění procedur
+GRANT EXECUTE ON uzivatel_objednavky_utrata TO xtrant02;
+GRANT EXECUTE ON podil_levnejsich_objednavek TO xtrant02;
+
+-- Práva na data zobrazované jeho pohledem (bude upravovat jen stavy objednávek, na ty jediné má více práv)
+GRANT ALL ON objednavka TO xtrant02;
+GRANT SELECT ON uzivatel TO xtrant02;
+GRANT SELECT ON adresa TO xtrant02;
+
+-- Práva na jeho pohled samotný a proceduru na jeho refresh
+GRANT ALL ON cekajici_objednavky TO xtrant02;
+GRANT EXECUTE ON refresh_cekajicich_objednavek TO xtrant02;
+
+
+
+
+
+
